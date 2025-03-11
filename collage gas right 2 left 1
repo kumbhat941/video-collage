@@ -1,0 +1,60 @@
+import os
+import subprocess
+from pathlib import Path
+
+# Define paths
+experiment_video = r"D:\HTO\Batch_Melting\20250205_mit_fining_Double_weight\Mit_2g_Fining_Agent.mp4" # Change this to your experiment video path
+animation_folder = r"D:\HTO\Batch_Melting\20250205_mit_fining_Double_weight\Ani_Gas"  # Folder containing all animation videos
+output_video = r"D:\HTO\Batch_Melting\20250205_mit_fining_Double_weight\Collage\output_collage.mp4"
+
+# Get all MP4 animation videos in the folder
+animation_videos = [str(f) for f in Path(animation_folder).glob("*.mp4")]
+
+# Ensure there are animation videos
+if not animation_videos:
+    print("No animation videos found! Exiting...")
+    exit()
+
+# Keep original resolution for better quality   
+resized_videos = []
+for i, video in enumerate(animation_videos):
+    resized_video = video.replace(".mp4", "_resized.mp4")
+    subprocess.run([
+        "ffmpeg", "-i", video, "-vf", "scale=640:480", "-c:v", "libx264",
+        "-preset", "slow", "-crf", "18", "-b:v", "5000k", resized_video, "-y"
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    resized_videos.append(resized_video)
+
+# Choose layout dynamically
+if len(resized_videos) == 1:
+    filter_complex = f"[0:v]scale=1280:720[left]; [1:v]scale=640:480[right]; [left][right]hstack"
+elif len(resized_videos) == 2:
+    filter_complex = f"[0:v]scale=1280:720[left]; [1:v]scale=640:360[topright]; [2:v]scale=640:360[bottomright]; [topright][bottomright]vstack[right]; [left][right]hstack"
+elif len(resized_videos) >= 3:
+    filter_complex = f"[0:v]scale=1280:720[v0]; [1:v]scale=640:360[v1]; [2:v]scale=640:360[v2]; [3:v]scale=640:360[v3]; [v0][v1]hstack[top]; [v2][v3]hstack[bottom]; [top][bottom]vstack"
+else:
+    print("Not enough videos to create a layout. Exiting...")
+    exit()
+
+# Build FFmpeg command
+ffmpeg_command = ["ffmpeg", "-i", experiment_video]
+for video in resized_videos[:3]:  # Limit to 3 animations
+    ffmpeg_command.extend(["-i", video])
+ffmpeg_command.extend([
+    "-filter_complex", filter_complex,
+    "-c:v", "libx264",
+    "-preset", "slow",
+    "-crf", "18",
+    "-b:v", "5000k",
+    output_video, "-y"
+])
+
+# Run FFmpeg to merge videos with high quality settings
+print("Merging videos into high-quality collage...")
+subprocess.run(ffmpeg_command)
+
+# Clean up resized videos
+for video in resized_videos:
+    os.remove(video)
+
+print(f"✅ High-quality collage video saved at: {output_video}")
